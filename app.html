@@ -66,14 +66,14 @@
     </div>
 
     <div class="card">
-        <h2>📊 當日攝取總結</h2>
+        <h2>當日攝取總結</h2>
         <div id="summaryDashboard">
             </div>
         <div id="advice" style="margin-top: 10px; font-weight: bold; color: var(--accent); text-align: center;"></div>
     </div>
 
     <div class="card">
-        <h3>🍽️ 餐點紀錄</h3>
+        <h3>餐點紀錄</h3>
         <select id="mealType">
             <option value="breakfast">早餐</option>
             <option value="lunch">午餐</option>
@@ -243,10 +243,10 @@
             };
 
             let html = '';
-            html += makeBar("🔥 熱量", totalCal, day.targetCal, "fill-cal", "kcal");
-            html += makeBar("🥩 蛋白質", totalPro, day.targetPro, "fill-pro", "g");
-            html += makeBar("🍚 澱粉/碳水", totalCarb, 300, "fill-carb", "g"); // 預設碳水目標 300，可自訂
-            html += makeBar("🥦 蔬菜", totalVeg, 3, "fill-veg", "份"); // 預設蔬菜 3 份
+            html += makeBar("熱量", totalCal, day.targetCal, "fill-cal", "kcal");
+            html += makeBar("蛋白質", totalPro, day.targetPro, "fill-pro", "g");
+            html += makeBar("澱粉/碳水", totalCarb, 300, "fill-carb", "g"); // 預設碳水目標 300，可自訂
+            html += makeBar("蔬菜", totalVeg, 3, "fill-veg", "份"); // 預設蔬菜 3 份
 
             document.getElementById('summaryDashboard').innerHTML = html;
 
@@ -254,10 +254,10 @@
             const diffPro = day.targetPro - totalPro;
             const adviceDiv = document.getElementById('advice');
             if (diffPro > 0) {
-                adviceDiv.textContent = `⚠️ 還差 ${diffPro.toFixed(1)}g 蛋白質達標！`;
+                adviceDiv.textContent = `還差 ${diffPro.toFixed(1)}g 蛋白質達標！`;
                 adviceDiv.style.color = "#d32f2f";
             } else {
-                adviceDiv.textContent = `✅ 蛋白質已達標！做得好！`;
+                adviceDiv.textContent = `蛋白質已達標！做得好！`;
                 adviceDiv.style.color = "#388e3c";
             }
 
