@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>飲控日曆 App</title>
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --accent: #2196F3;
+            --bg: #f4f4f9;
+            --card: #ffffff;
+            --text: #333;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 20px; max-width: 600px; margin: 0 auto; }
+        h1, h2, h3 { text-align: center; color: #2c3e50; }
+        
+        /* 卡片樣式 */
+        .card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        
+        /* 輸入與按鈕 */
+        input, select, button { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        button { background: var(--primary); color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { opacity: 0.9; }
+        .row { display: flex; gap: 10px; }
+        .row input { flex: 1; }
+        
+        /* 訓練日切換 */
+        .mode-switch { display: flex; align-items: center; justify-content: space-between; background: #e3f2fd; padding: 10px; border-radius: 8px; margin-bottom: 15px; }
+        .mode-switch.training { background: #ffebee; border: 1px solid #ef5350; }
+        
+        /* 進度條 */
+        .progress-container { margin: 10px 0; }
+        .progress-label { display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 3px; }
+        .progress-bar { height: 10px; background: #eee; border-radius: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; transition: width 0.3s ease; }
+        
+        /* 顏色定義 */
+        .fill-cal { background: #FF9800; }
+        .fill-pro { background: #2196F3; }
+        .fill-carb { background: #9C27B0; }
+        .fill-veg { background: #4CAF50; }
+
+        /* 每週總結表格 */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; }
+        th, td { padding: 8px; text-align: center; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <label>選擇日期：</label>
+        <input type="date" id="currentDate">
+        
+        <div class="mode-switch" id="modeContainer">
+            <span id="modeText">休息日 (目標較低)</span>
+            <button onclick="toggleTraining()" style="width: auto; margin: 0;">切換模式</button>
+        </div>
+
+        <h3>今日目標設定</h3>
+        <div class="row">
+            <input type="number" id="targetCal" placeholder="目標熱量 (kcal)" value="1800">
+            <input type="number" id="targetPro" placeholder="目標蛋白質 (g)" value="60">
+        </div>
+        <p style="font-size: 0.8em; color: #666; text-align: center;">*訓練日會自動增加 20% 蛋白質目標建議</p>
+    </div>
+
+    <div class="card">
+        <h2>📊 當日攝取總結</h2>
+        <div id="summaryDashboard">
+            </div>
+        <div id="advice" style="margin-top: 10px; font-weight: bold; color: var(--accent); text-align: center;"></div>
+    </div>
+
+    <div class="card">
+        <h3>🍽️ 餐點紀錄</h3>
+        <select id="mealType">
+            <option value="breakfast">早餐</option>
+            <option value="lunch">午餐</option>
+            <option value="dinner">晚餐</option>
+            <option value="snack">點心/補給</option>
+        </select>
+        
+        <div class="row">
+            <input type="number" id="inCal" placeholder="熱量 (kcal)">
+            <input type="number" id="inPro" placeholder="蛋白質 (g)">
+        </div>
+        <div class="row">
+            <input type="number" id="inCarb" placeholder="澱粉/碳水 (g)">
+            <input type="number" id="inVeg" placeholder="蔬菜 (份)">
+        </div>
+        <button onclick="addEntry()">加入紀錄</button>
+        <button onclick="clearDay()" style="background: #ef5350; margin-top: 10px;">🗑️ 清空今日紀錄</button>
+    </div>
+
+    <div class="card">
+        <h3>本週概況 (近7天)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>日期</th>
+                    <th>熱量</th>
+                    <th>蛋白質</th>
+                    <th>模式</th>
+                </tr>
+            </thead>
+            <tbody id="weeklyTable">
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        // 初始化
+        const STORAGE_KEY = 'diet_app_data';
+        let appData = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+        
+        // 設定今天的日期為預設值
+        const dateInput = document.getElementById('currentDate');
+        dateInput.valueAsDate = new Date();
+        
+        // 監聽日期變動
+        dateInput.addEventListener('change', renderUI);
+
+        // 基本資料結構範本
+        function getEmptyDay() {
+            return {
+                isTraining: false,
+                targetCal: 1800,
+                targetPro: 60,
+                meals: [] // 每個項目: { type, cal, pro, carb, veg }
+            };
+        }
+
+        // 1. 核心功能：讀取與儲存
+        function getCurrentData() {
+            const date = dateInput.value;
+            if (!appData[date]) {
+                appData[date] = getEmptyDay();
+            }
+            return appData[date];
+        }
+
+        function saveData() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+            renderUI();
+        }
+
+        // 2. 切換訓練模式
+        function toggleTraining() {
+            const day = getCurrentData();
+            day.isTraining = !day.isTraining;
+            // 簡單邏輯：訓練日自動把蛋白質目標提高 20%，熱量提高 10% (可自行調整)
+            if (day.isTraining) {
+                day.targetPro = Math.round(day.targetPro * 1.2);
+                day.targetCal = Math.round(day.targetCal * 1.1);
+            } else {
+                // 恢復邏輯 (簡化處理，實際可做更複雜的設定記憶)
+                day.targetPro = Math.round(day.targetPro / 1.2);
+                day.targetCal = Math.round(day.targetCal / 1.1);
+            }
+            saveData();
+        }
+
+        // 3. 加入紀錄
+        function addEntry() {
+            const day = getCurrentData();
+            const type = document.getElementById('mealType').value;
+            const cal = parseFloat(document.getElementById('inCal').value) || 0;
+            const pro = parseFloat(document.getElementById('inPro').value) || 0;
+            const carb = parseFloat(document.getElementById('inCarb').value) || 0;
+            const veg = parseFloat(document.getElementById('inVeg').value) || 0;
+
+            if (cal === 0 && pro === 0 && carb === 0) {
+                alert("請至少輸入一項數值");
+                return;
+            }
+
+            day.meals.push({ type, cal, pro, carb, veg });
+            
+            // 更新目標設定 (若使用者有手動修改目標輸入框)
+            day.targetCal = parseFloat(document.getElementById('targetCal').value) || day.targetCal;
+            day.targetPro = parseFloat(document.getElementById('targetPro').value) || day.targetPro;
+
+            // 清空輸入框
+            document.getElementById('inCal').value = '';
+            document.getElementById('inPro').value = '';
+            document.getElementById('inCarb').value = '';
+            document.getElementById('inVeg').value = '';
+
+            saveData();
+        }
+
+        function clearDay() {
+            if(confirm("確定要清空這天的所有紀錄嗎？")) {
+                const date = dateInput.value;
+                appData[date] = getEmptyDay();
+                saveData();
+            }
+        }
+
+        // 4. 渲染畫面 (Render)
+        function renderUI() {
+            const day = getCurrentData();
+
+            // 更新模式顯示
+            const modeDiv = document.getElementById('modeContainer');
+            const modeText = document.getElementById('modeText');
+            if (day.isTraining) {
+                modeDiv.classList.add('training');
+                modeText.innerHTML = "🏋️ <b>訓練日</b> (蛋白質需求提升)";
+            } else {
+                modeDiv.classList.remove('training');
+                modeText.innerHTML = "🛌 <b>休息日</b>";
+            }
+
+            // 更新目標輸入框 (顯示當前設定)
+            document.getElementById('targetCal').value = day.targetCal;
+            document.getElementById('targetPro').value = day.targetPro;
+
+            // 計算總和
+            let totalCal = 0, totalPro = 0, totalCarb = 0, totalVeg = 0;
+            day.meals.forEach(m => {
+                totalCal += m.cal;
+                totalPro += m.pro;
+                totalCarb += m.carb;
+                totalVeg += m.veg;
+            });
+
+            // 生成進度條 HTML
+            const makeBar = (label, current, target, colorClass, unit) => {
+                const pct = Math.min((current / target) * 100, 100);
+                return `
+                    <div class="progress-container">
+                        <div class="progress-label">
+                            <span>${label}</span>
+                            <span>${current} / ${target} ${unit}</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill ${colorClass}" style="width: ${pct}%"></div>
+                        </div>
+                    </div>
+                `;
+            };
+
+            let html = '';
+            html += makeBar("🔥 熱量", totalCal, day.targetCal, "fill-cal", "kcal");
+            html += makeBar("🥩 蛋白質", totalPro, day.targetPro, "fill-pro", "g");
+            html += makeBar("🍚 澱粉/碳水", totalCarb, 300, "fill-carb", "g"); // 預設碳水目標 300，可自訂
+            html += makeBar("🥦 蔬菜", totalVeg, 3, "fill-veg", "份"); // 預設蔬菜 3 份
+
+            document.getElementById('summaryDashboard').innerHTML = html;
+
+            // 提醒文字
+            const diffPro = day.targetPro - totalPro;
+            const adviceDiv = document.getElementById('advice');
+            if (diffPro > 0) {
+                adviceDiv.textContent = `⚠️ 還差 ${diffPro.toFixed(1)}g 蛋白質達標！`;
+                adviceDiv.style.color = "#d32f2f";
+            } else {
+                adviceDiv.textContent = `✅ 蛋白質已達標！做得好！`;
+                adviceDiv.style.color = "#388e3c";
+            }
+
+            renderWeekly();
+        }
+
+        // 5. 每週總結邏輯
+        function renderWeekly() {
+            const tbody = document.getElementById('weeklyTable');
+            tbody.innerHTML = '';
+            
+            // 取得過去 7 天的日期 (含今天)
+            const dates = [];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                dates.push(d.toISOString().split('T')[0]);
+            }
+
+            dates.forEach(date => {
+                const data = appData[date];
+                if (data) {
+                    let dayCal = 0, dayPro = 0;
+                    data.meals.forEach(m => { dayCal += m.cal; dayPro += m.pro; });
+                    
+                    const row = `
+                        <tr>
+                            <td>${date.slice(5)}</td>
+                            <td>${dayCal}</td>
+                            <td>${dayPro} / ${data.targetPro}</td>
+                            <td>${data.isTraining ? '🏋️' : '🛌'}</td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                }
+            });
+        }
+
+        // 啟動時執行一次
+        renderUI();
+
+    </script>
+</body>
+</html>
